@@ -320,10 +320,15 @@ TEST(MatMulNBitsWorkspace, EndToEndWorkspaceAgreement) {
   const std::vector<std::string> output_names{"Y"};
   std::vector<OrtValue> fetches;
   ASSERT_STATUS_OK(session.Run(feeds, output_names, &fetches));
+  EXPECT_FALSE(GetMatMulNBitsLastComputeUsedPreallocatedWorkspace(op_kernel))
+      << "The first run should trace workspace lifetime and use the dynamic fallback.";
+
+  fetches.clear();
+  ASSERT_STATUS_OK(session.Run(feeds, output_names, &fetches));
 
   const size_t runtime = GetMatMulNBitsLastComputeWorkspaceBytes(op_kernel);
   EXPECT_TRUE(GetMatMulNBitsLastComputeUsedPreallocatedWorkspace(op_kernel))
-      << "Runtime did not use the Level-2 preallocated workspace slot.";
+      << "The cached memory pattern did not supply the Level-2 workspace slot.";
 
   std::cout << "[ WORKSPACE ] Level1(estimate)=" << *level1 << " bytes, Level2(declare)=" << level2
             << " bytes, runtime(request)=" << runtime << " bytes" << std::endl;
