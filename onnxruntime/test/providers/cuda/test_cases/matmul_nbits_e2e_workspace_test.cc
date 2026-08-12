@@ -52,6 +52,7 @@
 #include "core/graph/onnx_protobuf.h"
 #include "core/providers/cuda/cuda_execution_provider.h"
 #include "core/providers/cuda/cuda_execution_provider_info.h"
+#include "core/session/onnxruntime_session_options_config_keys.h"
 
 #include "contrib_ops/cuda/quantization/matmul_nbits_workspace_estimate.h"
 
@@ -275,6 +276,8 @@ TEST(MatMulNBitsWorkspace, EndToEndWorkspaceAgreement) {
 
   SessionOptions so;
   so.session_logid = "MatMulNBitsWorkspaceE2E";
+  ASSERT_STATUS_OK(so.config_options.AddConfigEntry(
+      kOrtSessionOptionsEnableStaticWorkspacePreallocation, "1"));
   InferenceSessionWrapper session(so, GetEnvironment());
 
   auto cuda_ep = std::make_shared<CUDAExecutionProvider>(CUDAExecutionProviderInfo{});
@@ -319,6 +322,8 @@ TEST(MatMulNBitsWorkspace, EndToEndWorkspaceAgreement) {
   ASSERT_STATUS_OK(session.Run(feeds, output_names, &fetches));
 
   const size_t runtime = GetMatMulNBitsLastComputeWorkspaceBytes(op_kernel);
+  EXPECT_TRUE(GetMatMulNBitsLastComputeUsedPreallocatedWorkspace(op_kernel))
+      << "Runtime did not use the Level-2 preallocated workspace slot.";
 
   std::cout << "[ WORKSPACE ] Level1(estimate)=" << *level1 << " bytes, Level2(declare)=" << level2
             << " bytes, runtime(request)=" << runtime << " bytes" << std::endl;
@@ -531,6 +536,8 @@ TEST(MatMulNBitsWorkspace, DynamicShapeNoOverrideFallsBack) {
             << " bytes (live GetScratchBuffer)" << std::endl;
   EXPECT_GT(runtime, static_cast<size_t>(0))
       << "Runtime workspace request was 0 - the CUTLASS GEMM branch did not run (GEMV path?).";
+  EXPECT_FALSE(GetMatMulNBitsLastComputeUsedPreallocatedWorkspace(op_kernel))
+      << "Dynamic-shape execution unexpectedly used a static workspace buffer.";
 }
 
 // ---------------------------------------------------------------------------
