@@ -115,6 +115,7 @@ struct MOEParallelismConfig {
 };
 
 struct QuantParams {
+  int tensor_core_min_rows = 33;  // 0 disables tensor-core INT4 GEMV.
   // Int weight only quantization params
   struct
   {
@@ -293,6 +294,9 @@ class CutlassMoeFCRunnerInterface {
   // pushes it in here, so inference-time config selection does not depend on the live environment.
   // Default no-op for runners that do not implement the SM80 FP4 path.
   virtual void setUseSm80Fp4(bool /*use_sm80_fp4*/) {}
+  // The decision above filters getTactics(), so profiling results are only interchangeable between runners
+  // that agree on it.
+  virtual bool useSm80Fp4() const { return false; }
   virtual void setUseFp4DeepGemm(bool /*use_fp4_deep_gemm*/) {}
 
   // fp32 per-[128 N, 128 K] block scales for the prepacked e4m3 QMoE DeepGEMM weights. The
@@ -415,7 +419,8 @@ class CutlassMoeFCRunner : public CutlassMoeFCRunnerInterface {
   static_assert(std::is_same_v<OutputType, BackBoneType>, "Scale and bias types must match OutputType");
 
  public:
-  CutlassMoeFCRunner(int sm_version, ActivationType activation_type, bool normalize_routing_weights, bool use_sparse_mixer);
+  CutlassMoeFCRunner(int sm_version, ActivationType activation_type, bool normalize_routing_weights, bool use_sparse_mixer,
+                     bool use_sm80_fp4 = false);
 
   ~CutlassMoeFCRunner() override = default;
 
@@ -450,6 +455,8 @@ class CutlassMoeFCRunner : public CutlassMoeFCRunnerInterface {
       gemm2_config_ = tactics[0];
     }
   }
+
+  bool useSm80Fp4() const override { return moe_gemm_runner_.useSm80Fp4(); }
 
   void setUseFp4DeepGemm(bool use_fp4_deep_gemm) override {
     use_fp4_deep_gemm_ = use_fp4_deep_gemm;

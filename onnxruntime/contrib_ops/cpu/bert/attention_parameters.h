@@ -93,8 +93,9 @@ struct GroupQueryAttentionParameters : AttentionParameters {
   bool is_first_prompt;         // indicates whether this is first decoding step
   bool rotary_interleaved;
   bool use_smooth_softmax;
-  bool use_qk_norm = false;       // per-head Q/K RMSNorm (QK-Norm) prologue before RoPE (inputs 14/15)
-  float qk_norm_epsilon = 1e-6f;  // epsilon for the QK-Norm RMSNorm
+  bool use_qk_norm = false;  // per-head Q/K RMSNorm (QK-Norm) prologue before RoPE (inputs 14/15)
+  float q_norm_epsilon = 1e-6f;
+  float k_norm_epsilon = 1e-6f;
   float softcap;
   AttentionQkvFormat past_kv_format;
   int zeros_count;
@@ -156,6 +157,15 @@ struct PagedAttentionParameters : AttentionParameters {
   // [rotary_offset, rotary_offset + rotary_dim); channels outside are copied through. Default 0
   // reproduces the original prefix-RoPE behavior. MLA uses rotary_offset == kv_lora_rank.
   int rotary_offset = 0;
+};
+
+// Parameters for MultiHeadLatentAttention. One latent cache row of head_size channels is the key of every query
+// head, and channels [v_offset, v_offset + v_head_size) of the same row are its value. past_sequence_length is the
+// length of the past_kv buffer (0 when it is absent).
+struct MultiHeadLatentAttentionParameters : AttentionParameters {
+  int v_offset = 0;
+  int present_sequence_length = 0;  // max(total_sequence_length, past_sequence_length)
+  bool is_first_prompt = false;     // sequence_length == total_sequence_length
 };
 
 // Parameters for sparse attention.

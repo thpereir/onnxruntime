@@ -3,8 +3,6 @@
 
 #include "sync_stream.h"
 
-#include <mutex>
-
 #include "core/providers/webgpu/data_transfer.h"
 #include "core/providers/webgpu/webgpu_context.h"
 #include "core/providers/webgpu/webgpu_execution_provider.h"
@@ -33,8 +31,8 @@ struct WebGpuSyncStream final : OrtSyncStreamImpl {
   static OrtStatus* ORT_API_CALL FlushImpl(OrtSyncStreamImpl* stream) noexcept {
     EXCEPTION_TO_RETURNED_STATUS_BEGIN
     auto& ep = static_cast<WebGpuSyncStream*>(stream)->ep_;
-    auto& context = WebGpuContextFactory::GetContext(ep.GetDeviceId());
     std::lock_guard<std::recursive_mutex> lock{ep.Recording().mutex};
+    auto& context = WebGpuContextFactory::GetContext(ep.GetDeviceId());
     // Submit before streamless readbacks (e.g., node dumps) use a different recording.
     // Readbacks wait for completion; GPU consumers rely on ordering on the shared queue.
     ORT_THROW_IF_ERROR(context.Flush(ep.BufferManager(), ep.Recording()));
@@ -86,8 +84,16 @@ CommandRecordingState& GetWebGpuStreamCommandState(const OrtSyncStream* stream) 
 common::Status CopyTensorOnWebGpuStream(const OrtSyncStream* stream, const void* src_data,
                                         bool src_is_gpu, void* dst_data, bool dst_is_gpu, size_t bytes) {
   auto& ep = WebGpuSyncStream::From(stream).ep_;
+  std::lock_guard<std::recursive_mutex> lock{ep.Recording().mutex};
   DataTransferImpl transfer(ep.BufferManager(), ep.Recording());
   return transfer.CopyTensor(src_data, src_is_gpu, dst_data, dst_is_gpu, bytes);
+}
+
+void UploadTensorsOnWebGpuStream(const OrtSyncStream* stream, int device_id,
+                                 gsl::span<const BufferManager::UploadInfo> uploads) {
+  auto& ep = WebGpuSyncStream::From(stream).ep_;
+  ORT_ENFORCE(ep.GetDeviceId() == device_id, "WebGPU upload destination does not match the stream device.");
+  ep.BufferManager().UploadBatch(ep.Recording(), uploads);
 }
 
 }  // namespace ep
