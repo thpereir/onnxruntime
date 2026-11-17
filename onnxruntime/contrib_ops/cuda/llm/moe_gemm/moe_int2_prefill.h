@@ -8,6 +8,8 @@
 #include <cuda_fp16.h>
 #include <cuda_runtime_api.h>
 
+#include "contrib_ops/cuda/llm/moe_gemm/common.h"
+
 namespace onnxruntime::llm::kernels::cutlass_kernels {
 
 struct Int2MoePrefillParams {
@@ -39,6 +41,9 @@ struct Int2MoePrefillParams {
   float beta = 0.0f;
   float limit = 0.0f;
   bool swiglu_limit_after_activation = false;
+  // Gated activation applied after FC1. Must be an interleaved gated activation (Swiglu or Geglu);
+  // both emit an fc1 output of width 2*inter_size. Defaults to Swiglu for back-compat.
+  ActivationType activation_type = ActivationType::Swiglu;
   cudaStream_t stream = nullptr;
 };
 
